@@ -8,44 +8,48 @@ app.use(express.json());
 
 // Add record
 app.post("/bp", (req, res) => {
-    const { systolic, diastolic, pulse, created_at } = req.body;
+    try {
+        const { systolic, diastolic, pulse, created_at } = req.body;
 
-    db.run(
-        `INSERT INTO bp_records (systolic, diastolic, pulse, created_at)
-     VALUES (?, ?, ?, ?)`,
-        [
+        const stmt = db.prepare(`
+      INSERT INTO bp_records (systolic, diastolic, pulse, created_at)
+      VALUES (?, ?, ?, ?)
+    `);
+
+        const result = stmt.run(
             systolic,
             diastolic,
             pulse,
             created_at || new Date().toISOString()
-        ],
-        function (err) {
-            if (err) return res.status(500).send(err);
-            res.send({ id: this.lastID });
-        }
-    );
+        );
+
+        res.send({ id: result.lastInsertRowid });
+    } catch (err) {
+        res.status(500).send(err);
+    }
 });
+
+
 // Get records (with filter)
 app.get("/bp", (req, res) => {
-    const { from, to } = req.query;
+    try {
+        const { from, to } = req.query;
 
-    let query = "SELECT * FROM bp_records WHERE 1=1";
-    let params = [];
+        let query = "SELECT * FROM bp_records WHERE 1=1";
+        let params = [];
 
-    if (from) {
-        query += " AND date(created_at) >= date(?)";
-        params.push(from);
-    }
+        if (from) {
+            query += " AND date(created_at) >= date(?)";
+            params.push(from);
+        }
 
-    if (to) {
-        query += " AND date(created_at) <= date(?)";
-        params.push(to);
-    }
+        if (to) {
+            query += " AND date(created_at) <= date(?)";
+            params.push(to);
+        }
 
-    db.all(query, params, (err, rows) => {
-        if (err) return res.status(500).send(err);
+        const rows = db.prepare(query).all(...params);
 
-        // Calculate average
         let avgSys = 0, avgDia = 0;
 
         if (rows.length > 0) {
@@ -60,7 +64,9 @@ app.get("/bp", (req, res) => {
                 diastolic: avgDia.toFixed(1)
             }
         });
-    });
+    } catch (err) {
+        res.status(500).send(err);
+    }
 });
 
 // Export CSV
@@ -81,13 +87,14 @@ app.get("/export", (req, res) => {
 });
 
 app.delete("/bp/:id", (req, res) => {
-    const { id } = req.params;
+    try {
+        const result = db
+            .prepare("DELETE FROM bp_records WHERE id = ?")
+            .run(req.params.id);
 
-    db.run("DELETE FROM bp_records WHERE id = ?", [id], function (err) {
-        if (err) return res.status(500).send(err);
-
-        res.send({ message: "Record deleted", changes: this.changes });
-    });
+        res.send({ deleted: result.changes });
+    } catch (err) {
+        res.status(500).send(err);
+    }
 });
-
 app.listen(3001, () => console.log("Server running on port 3001"));

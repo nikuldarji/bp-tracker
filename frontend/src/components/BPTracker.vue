@@ -172,7 +172,7 @@ const to = ref("");
 const records = ref([]);
 const avg = ref({ systolic: 0, diastolic: 0 });
 
-const API = "http://localhost:3001";
+const API = import.meta.env.VITE_API_URL;
 
 // Table headers
 const headers = [
